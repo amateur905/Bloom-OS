@@ -29,14 +29,17 @@ ahci.o: ahci.c ahci.h pmm.h
 blockdev.o: blockdev.c blockdev.h
 	gcc -ffreestanding -fno-stack-protector -fno-pic -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -m64 -Wall -c blockdev.c -o blockdev.o
 
+nvme.o: nvme.c nvme.h pmm.h
+	gcc -ffreestanding -fno-stack-protector -fno-pic -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -m64 -Wall -c nvme.c -o nvme.o
+
 fat32.o: fat32.c fat32.h blockdev.h pmm.h
 	gcc -ffreestanding -fno-stack-protector -fno-pic -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -m64 -Wall -c fat32.c -o fat32.o
 
-kernel.o: kernel.c boot_info.h font8x16.h logo.h idt.h keyboard.h mouse.h pmm.h pci.h ahci.h fat32.h blockdev.h
+kernel.o: kernel.c boot_info.h font8x16.h logo.h idt.h keyboard.h mouse.h pmm.h pci.h ahci.h fat32.h blockdev.h nvme.h
 	gcc -ffreestanding -fno-stack-protector -fno-pic -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -m64 -Wall -c kernel.c -o kernel.o
 
-kernel.elf: start.o irq_stubs.o idt.o keyboard.o mouse.o pmm.o pci.o ahci.o blockdev.o fat32.o kernel.o linker.ld
-	ld -T linker.ld -o kernel.elf start.o irq_stubs.o idt.o keyboard.o mouse.o pmm.o pci.o ahci.o blockdev.o fat32.o kernel.o
+kernel.elf: start.o irq_stubs.o idt.o keyboard.o mouse.o pmm.o pci.o ahci.o blockdev.o nvme.o fat32.o kernel.o linker.ld
+	ld -T linker.ld -o kernel.elf start.o irq_stubs.o idt.o keyboard.o mouse.o pmm.o pci.o ahci.o blockdev.o nvme.o fat32.o kernel.o
 
 $(TARGET): kernel.elf
 	objcopy -O binary kernel.elf $(TARGET)
