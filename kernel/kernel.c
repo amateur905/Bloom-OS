@@ -10,6 +10,7 @@
 #include "ahci.h"
 #include "fat32.h"
 #include "blockdev.h"
+#include "nvme.h"
 
 static volatile uint32_t *FrameBuffer;
 static uint64_t ScreenWidth;
@@ -293,36 +294,55 @@ kmain(BOOT_INFO *Info)
 
         if (AhciInit(Ahci.Abar)) {
             RegisterBlockDevice(AhciReadSectors, "AHCI");
-
-            uint8_t *SectorBuffer = (uint8_t *)AllocPage();
-
-            if (BlockReadSectors(0, 1, SectorBuffer)) {
-                if (SectorBuffer[510] == 0x55 && SectorBuffer[511] == 0xAA) {
-                    DrawString(20, 50, "Disk read OK, boot sig valid", TextColor);
-
-                    if (FatInit()) {
-                        FAT_FILE File = FatFindFile("KERNEL  BIN");
-
-                        if (File.Found) {
-                            DrawString(20, 70, "FAT32: KERNEL.BIN size ", TextColor);
-                            DrawUInt64(20 + 23 * FONT_WIDTH, 70, File.Size, TextColor);
-                        } else {
-                            DrawString(20, 70, "FAT32: KERNEL.BIN not found", TextColor);
-                        }
-                    } else {
-                        DrawString(20, 70, "FAT32 init failed", TextColor);
-                    }
-                } else {
-                    DrawString(20, 50, "Disk read OK, bad boot sig", TextColor);
-                }
-            } else {
-                DrawString(20, 50, "Disk read failed", TextColor);
-            }
         } else {
             DrawString(20, 50, "AHCI port init failed", TextColor);
         }
     } else {
         DrawString(20, 30, "AHCI not found", TextColor);
+    }
+
+    if (!BlockDeviceReady()) {
+        NVME_LOCATION Nvme = FindNvmeController();
+
+        if (Nvme.Found) {
+            DrawString(20, 110, "NVMe found", TextColor);
+
+            if (NvmeInit(Nvme.Bar0)) {
+                RegisterBlockDevice(NvmeReadSectors, "NVMe");
+                DrawString(20, 130, "NVMe init OK", TextColor);
+            } else {
+                DrawString(20, 130, "NVMe init failed", TextColor);
+            }
+        } else {
+            DrawString(20, 110, "NVMe not found", TextColor);
+        }
+    }
+
+    if (BlockDeviceReady()) {
+        uint8_t *SectorBuffer = (uint8_t *)AllocPage();
+
+        if (BlockReadSectors(0, 1, SectorBuffer)) {
+            if (SectorBuffer[510] == 0x55 && SectorBuffer[511] == 0xAA) {
+                DrawString(20, 50, "Disk read OK, boot sig valid", TextColor);
+
+                if (FatInit()) {
+                    FAT_FILE File = FatFindFile("KERNEL  BIN");
+
+                    if (File.Found) {
+                        DrawString(20, 70, "FAT32: KERNEL.BIN size ", TextColor);
+                        DrawUInt64(20 + 23 * FONT_WIDTH, 70, File.Size, TextColor);
+                    } else {
+                        DrawString(20, 70, "FAT32: KERNEL.BIN not found", TextColor);
+                    }
+                } else {
+                    DrawString(20, 70, "FAT32 init failed", TextColor);
+                }
+            } else {
+                DrawString(20, 50, "Disk read OK, bad boot sig", TextColor);
+            }
+        } else {
+            DrawString(20, 50, "Disk read failed", TextColor);
+        }
     }
 
     HDA_LOCATION Hda = FindHdaController();
