@@ -1,5 +1,5 @@
 #include "fat32.h"
-#include "ahci.h"
+#include "blockdev.h"
 #include "pmm.h"
 
 #define DIR_ATTR_LONG_NAME 0x0F
@@ -45,7 +45,7 @@ NextCluster(uint32_t Cluster)
     uint32_t FatSectorIndex = FatByteOffset / BytesPerSector;
     uint32_t OffsetInSector = FatByteOffset % BytesPerSector;
 
-    AhciReadSectors(FatStartLba + FatSectorIndex, 1, ScratchSector);
+    BlockReadSectors(FatStartLba + FatSectorIndex, 1, ScratchSector);
 
     return ReadU32(ScratchSector, (int)OffsetInSector) & 0x0FFFFFFF;
 }
@@ -60,7 +60,7 @@ FatInit(void)
         return 0;
     }
 
-    if (!AhciReadSectors(0, 1, ScratchSector)) {
+    if (!BlockReadSectors(0, 1, ScratchSector)) {
         return 0;
     }
 
@@ -107,7 +107,7 @@ FatFindFile(const char *ShortName)
         uint32_t Lba = ClusterToLba(Cluster);
 
         for (uint8_t s = 0; s < SectorsPerCluster; s++) {
-            AhciReadSectors(Lba + s, 1, ClusterBuffer);
+            BlockReadSectors(Lba + s, 1, ClusterBuffer);
 
             for (int e = 0; e < 512; e += 32) {
                 uint8_t FirstByte = ClusterBuffer[e];
@@ -161,7 +161,7 @@ FatReadFile(FAT_FILE File, void *Buffer, uint32_t MaxBytes)
         uint32_t Lba = ClusterToLba(Cluster);
 
         for (uint8_t s = 0; s < SectorsPerCluster && BytesRemaining > 0; s++) {
-            AhciReadSectors(Lba + s, 1, ScratchSector);
+            BlockReadSectors(Lba + s, 1, ScratchSector);
 
             uint32_t ChunkSize = BytesRemaining < BytesPerSector ? BytesRemaining : BytesPerSector;
 
