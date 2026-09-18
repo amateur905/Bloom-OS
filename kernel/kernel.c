@@ -11,6 +11,8 @@
 #include "fat32.h"
 #include "blockdev.h"
 #include "nvme.h"
+#include "hda.h"
+#include "hda.h"
 
 static volatile uint32_t *FrameBuffer;
 static uint64_t ScreenWidth;
@@ -350,6 +352,24 @@ kmain(BOOT_INFO *Info)
     if (Hda.Found) {
         DrawString(20, 90, "HDA found, BAR0: ", TextColor);
         DrawUInt64(20 + 17 * FONT_WIDTH, 90, Hda.Bar0, TextColor);
+
+        HDA_STATUS HdaStatus = HdaInit(Hda.Bar0);
+
+        DrawString(20, 150, "HDA codec: ", TextColor);
+        DrawUInt64(20 + 11 * FONT_WIDTH, 150, HdaStatus.CodecFound, TextColor);
+        DrawString(20 + 13 * FONT_WIDTH, 150, "dac: ", TextColor);
+        DrawUInt64(20 + 18 * FONT_WIDTH, 150, HdaStatus.DacFound, TextColor);
+        DrawString(20 + 20 * FONT_WIDTH, 150, "pin: ", TextColor);
+        DrawUInt64(20 + 25 * FONT_WIDTH, 150, HdaStatus.PinFound, TextColor);
+
+        DrawString(20, 170, "HDA path: ", TextColor);
+        DrawUInt64(20 + 10 * FONT_WIDTH, 170, HdaStatus.PathLinked, TextColor);
+        DrawString(20 + 12 * FONT_WIDTH, 170, "stream: ", TextColor);
+        DrawUInt64(20 + 20 * FONT_WIDTH, 170, HdaStatus.StreamStarted, TextColor);
+
+        if (HdaStatus.StreamStarted) {
+            HdaPlayTestTone();
+        }
     } else {
         DrawString(20, 90, "HDA not found", TextColor);
     }
