@@ -117,16 +117,16 @@ SetupCorbRirb(void)
     Corb = (volatile uint32_t *)CorbPage;
     Rirb = (volatile uint64_t *)RirbPage;
 
-    uint8_t CorbSizeCap = (Read8(REG_CORBSIZE) >> 4) & 0x3;
+    uint8_t CorbSizeCap = (Read8(REG_CORBSIZE) >> 4) & 0x7;
     uint8_t CorbSizeBits;
-    if (CorbSizeCap & 0x2) { CorbEntries = 256; CorbSizeBits = 2; }
-    else if (CorbSizeCap & 0x1) { CorbEntries = 16; CorbSizeBits = 1; }
+    if (CorbSizeCap & 0x4) { CorbEntries = 256; CorbSizeBits = 2; }
+    else if (CorbSizeCap & 0x2) { CorbEntries = 16; CorbSizeBits = 1; }
     else { CorbEntries = 2; CorbSizeBits = 0; }
 
-    uint8_t RirbSizeCap = (Read8(REG_RIRBSIZE) >> 4) & 0x3;
+    uint8_t RirbSizeCap = (Read8(REG_RIRBSIZE) >> 4) & 0x7;
     uint8_t RirbSizeBits;
-    if (RirbSizeCap & 0x2) { RirbEntries = 256; RirbSizeBits = 2; }
-    else if (RirbSizeCap & 0x1) { RirbEntries = 16; RirbSizeBits = 1; }
+    if (RirbSizeCap & 0x4) { RirbEntries = 256; RirbSizeBits = 2; }
+    else if (RirbSizeCap & 0x2) { RirbEntries = 16; RirbSizeBits = 1; }
     else { RirbEntries = 2; RirbSizeBits = 0; }
 
     Write32(REG_CORBLBASE, (uint32_t)(uintptr_t)CorbPage);
@@ -332,6 +332,8 @@ HdaInit(uint32_t Bar0)
     HDA_STATUS Status;
     Status.Found = 1;
     Status.CodecFound = 0;
+    Status.CorbEntriesUsed = 0;
+    Status.RirbEntriesUsed = 0;
     Status.RootFgCount = 0;
     Status.AfgFound = 0;
     Status.LastFgTypeRaw = 0;
@@ -352,6 +354,9 @@ HdaInit(uint32_t Bar0)
     if (!SetupCorbRirb()) {
         return Status;
     }
+
+    Status.CorbEntriesUsed = CorbEntries;
+    Status.RirbEntriesUsed = RirbEntries;
 
     Wait(20000);
     uint16_t States = Read16(REG_STATESTS);
