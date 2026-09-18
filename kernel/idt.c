@@ -187,6 +187,12 @@ EnableInterrupts(void)
 }
 
 void
+DisableInterrupts(void)
+{
+    __asm__ __volatile__("cli");
+}
+
+void
 Sleep(uint64_t Milliseconds)
 {
     uint64_t Target = TickCount + Milliseconds;
