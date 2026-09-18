@@ -5,6 +5,9 @@
 typedef struct {
     int Found;
     int CodecFound;
+    uint32_t RootFgCount;
+    int AfgFound;
+    uint32_t WidgetCount;
     int DacFound;
     int PinFound;
     int PathLinked;
