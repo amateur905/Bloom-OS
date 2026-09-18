@@ -129,6 +129,24 @@ AllocPage(void)
     return (void *)0;
 }
 
+void *
+AllocPageBelow4G(void)
+{
+    uint64_t Limit = 0x100000000ULL / PAGE_SIZE;
+    if (Limit > TotalPages) {
+        Limit = TotalPages;
+    }
+
+    for (uint64_t i = 0; i < Limit; i++) {
+        if (!TestBit(i)) {
+            SetBit(i);
+            FreePages--;
+            return (void *)(uintptr_t)(i * PAGE_SIZE);
+        }
+    }
+    return (void *)0;
+}
+
 void
 FreePage(void *Addr)
 {
