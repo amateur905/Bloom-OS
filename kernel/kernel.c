@@ -357,15 +357,22 @@ kmain(BOOT_INFO *Info)
 
         DrawString(20, 150, "HDA codec: ", TextColor);
         DrawUInt64(20 + 11 * FONT_WIDTH, 150, HdaStatus.CodecFound, TextColor);
-        DrawString(20 + 13 * FONT_WIDTH, 150, "dac: ", TextColor);
-        DrawUInt64(20 + 18 * FONT_WIDTH, 150, HdaStatus.DacFound, TextColor);
-        DrawString(20 + 20 * FONT_WIDTH, 150, "pin: ", TextColor);
-        DrawUInt64(20 + 25 * FONT_WIDTH, 150, HdaStatus.PinFound, TextColor);
+        DrawString(20 + 13 * FONT_WIDTH, 150, "fgcount: ", TextColor);
+        DrawUInt64(20 + 22 * FONT_WIDTH, 150, HdaStatus.RootFgCount, TextColor);
+        DrawString(20 + 24 * FONT_WIDTH, 150, "afg: ", TextColor);
+        DrawUInt64(20 + 29 * FONT_WIDTH, 150, HdaStatus.AfgFound, TextColor);
 
-        DrawString(20, 170, "HDA path: ", TextColor);
-        DrawUInt64(20 + 10 * FONT_WIDTH, 170, HdaStatus.PathLinked, TextColor);
-        DrawString(20 + 12 * FONT_WIDTH, 170, "stream: ", TextColor);
-        DrawUInt64(20 + 20 * FONT_WIDTH, 170, HdaStatus.StreamStarted, TextColor);
+        DrawString(20, 170, "HDA widgets: ", TextColor);
+        DrawUInt64(20 + 13 * FONT_WIDTH, 170, HdaStatus.WidgetCount, TextColor);
+        DrawString(20 + 16 * FONT_WIDTH, 170, "dac: ", TextColor);
+        DrawUInt64(20 + 21 * FONT_WIDTH, 170, HdaStatus.DacFound, TextColor);
+        DrawString(20 + 23 * FONT_WIDTH, 170, "pin: ", TextColor);
+        DrawUInt64(20 + 28 * FONT_WIDTH, 170, HdaStatus.PinFound, TextColor);
+
+        DrawString(20, 190, "HDA path: ", TextColor);
+        DrawUInt64(20 + 10 * FONT_WIDTH, 190, HdaStatus.PathLinked, TextColor);
+        DrawString(20 + 12 * FONT_WIDTH, 190, "stream: ", TextColor);
+        DrawUInt64(20 + 20 * FONT_WIDTH, 190, HdaStatus.StreamStarted, TextColor);
 
         if (HdaStatus.StreamStarted) {
             HdaPlayTestTone();
