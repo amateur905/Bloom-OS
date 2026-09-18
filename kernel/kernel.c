@@ -9,6 +9,7 @@
 #include "pci.h"
 #include "ahci.h"
 #include "fat32.h"
+#include "blockdev.h"
 
 static volatile uint32_t *FrameBuffer;
 static uint64_t ScreenWidth;
@@ -291,9 +292,11 @@ kmain(BOOT_INFO *Info)
         DrawUInt64(20 + 18 * FONT_WIDTH, 30, Ahci.Abar, TextColor);
 
         if (AhciInit(Ahci.Abar)) {
+            RegisterBlockDevice(AhciReadSectors, "AHCI");
+
             uint8_t *SectorBuffer = (uint8_t *)AllocPage();
 
-            if (AhciReadSectors(0, 1, SectorBuffer)) {
+            if (BlockReadSectors(0, 1, SectorBuffer)) {
                 if (SectorBuffer[510] == 0x55 && SectorBuffer[511] == 0xAA) {
                     DrawString(20, 50, "Disk read OK, boot sig valid", TextColor);
 
