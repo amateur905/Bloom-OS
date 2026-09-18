@@ -5,6 +5,8 @@
 typedef struct {
     int Found;
     int CodecFound;
+    uint32_t CorbEntriesUsed;
+    uint32_t RirbEntriesUsed;
     uint32_t RootFgCount;
     int AfgFound;
     uint32_t LastFgTypeRaw;
