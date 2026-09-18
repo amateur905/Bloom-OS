@@ -334,6 +334,7 @@ HdaInit(uint32_t Bar0)
     Status.CodecFound = 0;
     Status.RootFgCount = 0;
     Status.AfgFound = 0;
+    Status.LastFgTypeRaw = 0;
     Status.WidgetCount = 0;
     Status.DacFound = 0;
     Status.PinFound = 0;
@@ -377,6 +378,7 @@ HdaInit(uint32_t Bar0)
     for (uint8_t i = 0; i < FgCount; i++) {
         uint8_t Nid = (uint8_t)(FgStart + i);
         uint32_t FgType = GetParam(Nid, PARAM_FUNCTION_GROUP_TYPE);
+        Status.LastFgTypeRaw = FgType;
         if ((FgType & 0xFF) == 0x01) {
             AfgNid = Nid;
             break;
