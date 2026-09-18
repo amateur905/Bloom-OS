@@ -25,3 +25,15 @@ typedef struct {
 } HDA_LOCATION;
 
 HDA_LOCATION FindHdaController(void);
+
+typedef struct {
+    uint8_t Bus;
+    uint8_t Device;
+    uint8_t Function;
+    uint16_t VendorId;
+    uint16_t DeviceId;
+    uint64_t Bar0;
+    int Found;
+} NVME_LOCATION;
+
+NVME_LOCATION FindNvmeController(void);
