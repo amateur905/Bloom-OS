@@ -361,6 +361,8 @@ kmain(BOOT_INFO *Info)
         DrawUInt64(20 + 22 * FONT_WIDTH, 150, HdaStatus.RootFgCount, TextColor);
         DrawString(20 + 24 * FONT_WIDTH, 150, "afg: ", TextColor);
         DrawUInt64(20 + 29 * FONT_WIDTH, 150, HdaStatus.AfgFound, TextColor);
+        DrawString(20 + 31 * FONT_WIDTH, 150, "fgtype: ", TextColor);
+        DrawUInt64(20 + 39 * FONT_WIDTH, 150, HdaStatus.LastFgTypeRaw, TextColor);
 
         DrawString(20, 170, "HDA widgets: ", TextColor);
         DrawUInt64(20 + 13 * FONT_WIDTH, 170, HdaStatus.WidgetCount, TextColor);
