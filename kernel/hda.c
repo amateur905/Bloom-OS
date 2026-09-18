@@ -225,7 +225,7 @@ ConnectPathToDac(uint8_t Nid, uint8_t TargetDac, int Depth)
     return 0;
 }
 
-static void
+static uint8_t
 WalkWidgets(uint8_t AfgNid)
 {
     uint32_t NodeCount = GetParam(AfgNid, PARAM_NODE_COUNT);
@@ -248,6 +248,8 @@ WalkWidgets(uint8_t AfgNid)
             }
         }
     }
+
+    return Count;
 }
 
 static void *SampleBuffer;
@@ -330,6 +332,9 @@ HdaInit(uint32_t Bar0)
     HDA_STATUS Status;
     Status.Found = 1;
     Status.CodecFound = 0;
+    Status.RootFgCount = 0;
+    Status.AfgFound = 0;
+    Status.WidgetCount = 0;
     Status.DacFound = 0;
     Status.PinFound = 0;
     Status.PathLinked = 0;
@@ -366,6 +371,7 @@ HdaInit(uint32_t Bar0)
     uint32_t RootNodeCount = GetParam(0, PARAM_NODE_COUNT);
     uint8_t FgStart = (uint8_t)((RootNodeCount >> 16) & 0xFF);
     uint8_t FgCount = (uint8_t)(RootNodeCount & 0xFF);
+    Status.RootFgCount = FgCount;
 
     uint8_t AfgNid = 0xFF;
     for (uint8_t i = 0; i < FgCount; i++) {
@@ -380,10 +386,11 @@ HdaInit(uint32_t Bar0)
     if (AfgNid == 0xFF) {
         return Status;
     }
+    Status.AfgFound = 1;
 
     SendVerb(AfgNid, VERB_SET_POWER_STATE, 0);
 
-    WalkWidgets(AfgNid);
+    Status.WidgetCount = WalkWidgets(AfgNid);
 
     if (FoundDac == 0xFF) {
         return Status;
