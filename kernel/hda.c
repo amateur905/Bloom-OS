@@ -107,8 +107,8 @@ SetupCorbRirb(void)
     Write8(REG_CORBCTL, 0);
     Write8(REG_RIRBCTL, 0);
 
-    void *CorbPage = AllocPage();
-    void *RirbPage = AllocPage();
+    void *CorbPage = AllocPageBelow4G();
+    void *RirbPage = AllocPageBelow4G();
 
     if (!CorbPage || !RirbPage) {
         return 0;
@@ -270,8 +270,8 @@ FillSquareWave(void)
 static int
 SetupStream(void)
 {
-    SampleBuffer = AllocPage();
-    BdlPage = AllocPage();
+    SampleBuffer = AllocPageBelow4G();
+    BdlPage = AllocPageBelow4G();
 
     if (!SampleBuffer || !BdlPage) {
         return 0;
