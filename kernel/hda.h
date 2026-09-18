@@ -7,6 +7,7 @@ typedef struct {
     int CodecFound;
     uint32_t RootFgCount;
     int AfgFound;
+    uint32_t LastFgTypeRaw;
     uint32_t WidgetCount;
     int DacFound;
     int PinFound;
