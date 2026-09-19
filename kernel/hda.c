@@ -146,11 +146,11 @@ SetupCorbRirb(void)
     Write8(REG_RIRBSIZE, RirbSizeBits);
     Write16(REG_RIRBWP, 0x8000);
     RirbReadPos = 0xFFFF;
-    Write16(REG_RINTCNT, 1);
+    Write16(REG_RINTCNT, 0xC0);
     Write8(REG_RIRBSTS, Read8(REG_RIRBSTS));
 
     Write8(REG_CORBCTL, 0x02);
-    Write8(REG_RIRBCTL, 0x02);
+    Write8(REG_RIRBCTL, 0x03);
 
     return 1;
 }
