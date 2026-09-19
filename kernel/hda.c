@@ -17,6 +17,7 @@
 #define REG_RIRBWP      0x58
 #define REG_RINTCNT     0x5A
 #define REG_RIRBCTL     0x5C
+#define REG_RIRBSTS     0x5D
 #define REG_RIRBSIZE    0x5E
 #define REG_SD0_BASE    0x80
 #define SD_SIZE         0x20
@@ -145,6 +146,7 @@ SetupCorbRirb(void)
     Write16(REG_RIRBWP, 0x8000);
     RirbReadPos = 0xFFFF;
     Write16(REG_RINTCNT, 1);
+    Write8(REG_RIRBSTS, Read8(REG_RIRBSTS));
 
     Write8(REG_CORBCTL, 0x02);
     Write8(REG_RIRBCTL, 0x02);
@@ -175,6 +177,7 @@ SendVerb(uint8_t Nid, uint32_t Verb, uint32_t Payload)
             RirbReadPos = Wp;
             LastRirbWp = Wp;
             Response = (uint32_t)(Entry & 0xFFFFFFFF);
+            Write8(REG_RIRBSTS, Read8(REG_RIRBSTS));
             return Response;
         }
         Wait(50);
