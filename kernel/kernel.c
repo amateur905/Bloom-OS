@@ -377,6 +377,8 @@ kmain(BOOT_INFO *Info)
         DrawUInt64(20 + 19 * FONT_WIDTH, 190, HdaStatus.WpBeforeSecond, TextColor);
         DrawString(20 + 22 * FONT_WIDTH, 190, "corbwp2: ", TextColor);
         DrawUInt64(20 + 31 * FONT_WIDTH, 190, HdaStatus.CorbWpReadback, TextColor);
+        DrawString(20 + 34 * FONT_WIDTH, 190, "repeat: ", TextColor);
+        DrawUInt64(20 + 42 * FONT_WIDTH, 190, HdaStatus.RepeatSameCallRaw, TextColor);
 
         DrawString(20, 210, "HDA widgets: ", TextColor);
         DrawUInt64(20 + 13 * FONT_WIDTH, 210, HdaStatus.WidgetCount, TextColor);
