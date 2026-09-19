@@ -10,6 +10,9 @@ typedef struct {
     uint32_t RootFgCount;
     int AfgFound;
     uint32_t LastFgTypeRaw;
+    uint32_t WpAfterFirst;
+    uint32_t WpBeforeSecond;
+    uint32_t CorbWpReadback;
     uint32_t WidgetCount;
     int DacFound;
     int PinFound;
