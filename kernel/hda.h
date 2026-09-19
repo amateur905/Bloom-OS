@@ -15,6 +15,8 @@ typedef struct {
     uint32_t WpAfterFirst;
     uint32_t WpBeforeSecond;
     uint32_t CorbWpReadback;
+    uint32_t CorbRpAfterFirst;
+    uint32_t CorbSts;
     uint32_t WidgetCount;
     int DacFound;
     int PinFound;
