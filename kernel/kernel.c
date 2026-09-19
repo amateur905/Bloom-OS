@@ -369,17 +369,24 @@ kmain(BOOT_INFO *Info)
         DrawString(20 + 18 * FONT_WIDTH, 170, "fgtype: ", TextColor);
         DrawUInt64(20 + 26 * FONT_WIDTH, 170, HdaStatus.LastFgTypeRaw, TextColor);
 
-        DrawString(20, 190, "HDA widgets: ", TextColor);
-        DrawUInt64(20 + 13 * FONT_WIDTH, 190, HdaStatus.WidgetCount, TextColor);
-        DrawString(20 + 16 * FONT_WIDTH, 190, "dac: ", TextColor);
-        DrawUInt64(20 + 21 * FONT_WIDTH, 190, HdaStatus.DacFound, TextColor);
-        DrawString(20 + 23 * FONT_WIDTH, 190, "pin: ", TextColor);
-        DrawUInt64(20 + 28 * FONT_WIDTH, 190, HdaStatus.PinFound, TextColor);
+        DrawString(20, 190, "wp1: ", TextColor);
+        DrawUInt64(20 + 5 * FONT_WIDTH, 190, HdaStatus.WpAfterFirst, TextColor);
+        DrawString(20 + 8 * FONT_WIDTH, 190, "wp2before: ", TextColor);
+        DrawUInt64(20 + 19 * FONT_WIDTH, 190, HdaStatus.WpBeforeSecond, TextColor);
+        DrawString(20 + 22 * FONT_WIDTH, 190, "corbwp2: ", TextColor);
+        DrawUInt64(20 + 31 * FONT_WIDTH, 190, HdaStatus.CorbWpReadback, TextColor);
 
-        DrawString(20, 210, "HDA path: ", TextColor);
-        DrawUInt64(20 + 10 * FONT_WIDTH, 210, HdaStatus.PathLinked, TextColor);
-        DrawString(20 + 12 * FONT_WIDTH, 210, "stream: ", TextColor);
-        DrawUInt64(20 + 20 * FONT_WIDTH, 210, HdaStatus.StreamStarted, TextColor);
+        DrawString(20, 210, "HDA widgets: ", TextColor);
+        DrawUInt64(20 + 13 * FONT_WIDTH, 210, HdaStatus.WidgetCount, TextColor);
+        DrawString(20 + 16 * FONT_WIDTH, 210, "dac: ", TextColor);
+        DrawUInt64(20 + 21 * FONT_WIDTH, 210, HdaStatus.DacFound, TextColor);
+        DrawString(20 + 23 * FONT_WIDTH, 210, "pin: ", TextColor);
+        DrawUInt64(20 + 28 * FONT_WIDTH, 210, HdaStatus.PinFound, TextColor);
+
+        DrawString(20, 230, "HDA path: ", TextColor);
+        DrawUInt64(20 + 10 * FONT_WIDTH, 230, HdaStatus.PathLinked, TextColor);
+        DrawString(20 + 12 * FONT_WIDTH, 230, "stream: ", TextColor);
+        DrawUInt64(20 + 20 * FONT_WIDTH, 230, HdaStatus.StreamStarted, TextColor);
 
         if (HdaStatus.StreamStarted) {
             HdaPlayTestTone();
