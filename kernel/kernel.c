@@ -364,10 +364,12 @@ kmain(BOOT_INFO *Info)
 
         DrawString(20, 170, "fgcount: ", TextColor);
         DrawUInt64(20 + 9 * FONT_WIDTH, 170, HdaStatus.RootFgCount, TextColor);
-        DrawString(20 + 11 * FONT_WIDTH, 170, "afg: ", TextColor);
-        DrawUInt64(20 + 16 * FONT_WIDTH, 170, HdaStatus.AfgFound, TextColor);
-        DrawString(20 + 18 * FONT_WIDTH, 170, "fgtype: ", TextColor);
-        DrawUInt64(20 + 26 * FONT_WIDTH, 170, HdaStatus.LastFgTypeRaw, TextColor);
+        DrawString(20 + 11 * FONT_WIDTH, 170, "fgstart: ", TextColor);
+        DrawUInt64(20 + 20 * FONT_WIDTH, 170, HdaStatus.FgStartNid, TextColor);
+        DrawString(20 + 22 * FONT_WIDTH, 170, "afg: ", TextColor);
+        DrawUInt64(20 + 27 * FONT_WIDTH, 170, HdaStatus.AfgFound, TextColor);
+        DrawString(20 + 29 * FONT_WIDTH, 170, "fgtype: ", TextColor);
+        DrawUInt64(20 + 37 * FONT_WIDTH, 170, HdaStatus.LastFgTypeRaw, TextColor);
 
         DrawString(20, 190, "wp1: ", TextColor);
         DrawUInt64(20 + 5 * FONT_WIDTH, 190, HdaStatus.WpAfterFirst, TextColor);
