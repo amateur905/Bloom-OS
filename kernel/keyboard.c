@@ -4,7 +4,7 @@
 
 #define KEY_BUFFER_SIZE 256
 
-static char KeyBuffer[KEY_BUFFER_SIZE];
+static int KeyBuffer[KEY_BUFFER_SIZE];
 static int KeyBufferHead = 0;
 static int KeyBufferTail = 0;
 
@@ -88,7 +88,7 @@ UpdateLeds(void)
 }
 
 static void
-PushChar(char c)
+PushChar(int c)
 {
     int Next = (KeyBufferHead + 1) % KEY_BUFFER_SIZE;
 
@@ -127,6 +127,21 @@ KeyboardIrqHandler(void)
             CtrlHeld = !Released;
         } else if (Code == 0x38) {
             AltHeld = !Released;
+        } else if (!Released) {
+            switch (Code) {
+            case 0x48: PushChar(KEY_UP); break;
+            case 0x50: PushChar(KEY_DOWN); break;
+            case 0x4B: PushChar(KEY_LEFT); break;
+            case 0x4D: PushChar(KEY_RIGHT); break;
+            case 0x47: PushChar(KEY_HOME); break;
+            case 0x4F: PushChar(KEY_END); break;
+            case 0x53: PushChar(KEY_DELETE); break;
+            case 0x49: PushChar(KEY_PGUP); break;
+            case 0x51: PushChar(KEY_PGDN); break;
+            case 0x1C: PushChar('\n'); break;
+            case 0x35: PushChar('/'); break;
+            default: break;
+            }
         }
 
         return;
@@ -200,16 +215,28 @@ InitKeyboard(void)
     UpdateLeds();
 }
 
-char
-KeyboardGetChar(void)
+int
+KeyboardGetKey(void)
 {
     if (KeyBufferTail == KeyBufferHead) {
         return 0;
     }
 
-    char c = KeyBuffer[KeyBufferTail];
+    int Key = KeyBuffer[KeyBufferTail];
     KeyBufferTail = (KeyBufferTail + 1) % KEY_BUFFER_SIZE;
-    return c;
+    return Key;
+}
+
+char
+KeyboardGetChar(void)
+{
+    int Key = KeyboardGetKey();
+
+    if (Key <= 0 || Key > 0xFF) {
+        return 0;
+    }
+
+    return (char)Key;
 }
 
 int

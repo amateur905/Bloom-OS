@@ -1,7 +1,9 @@
 #include <stdint.h>
 #include "boot_info.h"
-#include "font8x16.h"
 #include "logo.h"
+#include "gfx.h"
+#include "console.h"
+#include "shell.h"
 #include "idt.h"
 #include "keyboard.h"
 #include "mouse.h"
@@ -12,53 +14,6 @@
 #include "blockdev.h"
 #include "nvme.h"
 #include "hda.h"
-#include "hda.h"
-
-static volatile uint32_t *FrameBuffer;
-static uint64_t ScreenWidth;
-static uint64_t ScreenHeight;
-static uint64_t Stride;
-
-static void
-PutPixel(uint32_t x, uint32_t y, uint32_t color)
-{
-    FrameBuffer[y * Stride + x] = color;
-}
-
-static uint32_t
-GetPixel(uint32_t x, uint32_t y)
-{
-    return FrameBuffer[y * Stride + x];
-}
-
-static void
-FillScreen(uint32_t color)
-{
-    for (uint64_t y = 0; y < ScreenHeight; y++) {
-        for (uint64_t x = 0; x < ScreenWidth; x++) {
-            PutPixel(x, y, color);
-        }
-    }
-}
-
-static void
-DrawChar(uint32_t x, uint32_t y, char ch, uint32_t color)
-{
-    if (ch < FONT_FIRST_CHAR || ch > FONT_LAST_CHAR) {
-        return;
-    }
-
-    const uint8_t *Glyph = Font8x16[ch - FONT_FIRST_CHAR];
-
-    for (int row = 0; row < FONT_HEIGHT; row++) {
-        uint8_t Bits = Glyph[row];
-        for (int col = 0; col < FONT_WIDTH; col++) {
-            if (Bits & (1 << (7 - col))) {
-                PutPixel(x + col, y + row, color);
-            }
-        }
-    }
-}
 
 static void
 DrawLogo(uint32_t OffsetX, uint32_t OffsetY)
@@ -73,88 +28,6 @@ DrawLogo(uint32_t OffsetX, uint32_t OffsetY)
             PutPixel(OffsetX + x, OffsetY + y, Pixel & 0x00FFFFFF);
         }
     }
-}
-
-static void
-FillRect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color)
-{
-    for (uint32_t row = 0; row < h; row++) {
-        for (uint32_t col = 0; col < w; col++) {
-            PutPixel(x + col, y + row, color);
-        }
-    }
-}
-
-#define CURSOR_WIDTH 8
-#define CURSOR_HEIGHT 14
-
-static const uint8_t CursorBitmap[CURSOR_HEIGHT] = {
-    0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE, 0xFF,
-    0xF8, 0xD8, 0x8C, 0x0C, 0x06, 0x06
-};
-
-static uint32_t CursorSaved[CURSOR_WIDTH * CURSOR_HEIGHT];
-
-static void
-DrawCursor(uint32_t x, uint32_t y, uint32_t color)
-{
-    for (int row = 0; row < CURSOR_HEIGHT; row++) {
-        uint8_t Bits = CursorBitmap[row];
-        for (int col = 0; col < CURSOR_WIDTH; col++) {
-            if (Bits & (1 << (7 - col))) {
-                PutPixel(x + col, y + row, color);
-            }
-        }
-    }
-}
-
-static void
-SaveUnderCursor(uint32_t x, uint32_t y)
-{
-    for (int row = 0; row < CURSOR_HEIGHT; row++) {
-        for (int col = 0; col < CURSOR_WIDTH; col++) {
-            CursorSaved[row * CURSOR_WIDTH + col] = GetPixel(x + col, y + row);
-        }
-    }
-}
-
-static void
-RestoreUnderCursor(uint32_t x, uint32_t y)
-{
-    for (int row = 0; row < CURSOR_HEIGHT; row++) {
-        for (int col = 0; col < CURSOR_WIDTH; col++) {
-            PutPixel(x + col, y + row, CursorSaved[row * CURSOR_WIDTH + col]);
-        }
-    }
-}
-
-static void
-DrawString(uint32_t x, uint32_t y, const char *s, uint32_t color)
-{
-    uint32_t CurX = x;
-    for (int i = 0; s[i]; i++) {
-        DrawChar(CurX, y, s[i], color);
-        CurX += FONT_WIDTH;
-    }
-}
-
-static void
-DrawUInt64(uint32_t x, uint32_t y, uint64_t value, uint32_t color)
-{
-    char Buffer[21];
-    int Pos = 20;
-    Buffer[Pos] = 0;
-
-    if (value == 0) {
-        Buffer[--Pos] = '0';
-    } else {
-        while (value > 0) {
-            Buffer[--Pos] = (char)('0' + (value % 10));
-            value /= 10;
-        }
-    }
-
-    DrawString(x, y, &Buffer[Pos], color);
 }
 
 static int
@@ -248,10 +121,7 @@ PlayStartupChime(void)
 void
 kmain(BOOT_INFO *Info)
 {
-    FrameBuffer = (volatile uint32_t *)Info->FrameBufferBase;
-    ScreenWidth = Info->Width;
-    ScreenHeight = Info->Height;
-    Stride = Info->PixelsPerScanLine;
+    GfxInit(Info);
 
     FillScreen(0x00FF0000);
 
@@ -354,6 +224,8 @@ kmain(BOOT_INFO *Info)
         DrawUInt64(20 + 17 * FONT_WIDTH, 90, Hda.Bar0, TextColor);
 
         HDA_STATUS HdaStatus = HdaInit(Hda.Bar0);
+        GlobalHdaStatus = HdaStatus;
+        GlobalHdaFound = 1;
 
         DrawString(20, 150, "HDA codec: ", TextColor);
         DrawUInt64(20 + 11 * FONT_WIDTH, 150, HdaStatus.CodecFound, TextColor);
@@ -408,93 +280,7 @@ kmain(BOOT_INFO *Info)
         Sleep(40);
     }
 
-    uint32_t Margin = 20;
-    uint32_t LineSpacing = 4;
-    uint32_t CursorX = Margin;
-    uint32_t CursorY = TextY + FONT_HEIGHT + 40;
-
-    #define MAX_LINES 256
-    static uint32_t LineEndX[MAX_LINES];
-    int CurrentLine = 0;
-
-    uint32_t MouseCursorX = ScreenWidth / 2;
-    uint32_t MouseCursorY = ScreenHeight / 2;
-    uint32_t CursorColor = 0x00FFFFFF;
-
-    SaveUnderCursor(MouseCursorX, MouseCursorY);
-    DrawCursor(MouseCursorX, MouseCursorY, CursorColor);
-
-    for (;;) {
-        int GotEvent = 0;
-        char c = KeyboardGetChar();
-
-        if (c != 0) {
-            GotEvent = 1;
-
-            if (c == '\b') {
-                if (CursorX > Margin) {
-                    CursorX -= FONT_WIDTH;
-                    FillRect(CursorX, CursorY, FONT_WIDTH, FONT_HEIGHT, BackgroundColor);
-                } else if (CurrentLine > 0) {
-                    CurrentLine--;
-                    CursorY -= FONT_HEIGHT + LineSpacing;
-                    CursorX = LineEndX[CurrentLine];
-                }
-            } else if (c == '\n') {
-                if (CurrentLine < MAX_LINES - 1) {
-                    LineEndX[CurrentLine] = CursorX;
-                    CurrentLine++;
-                }
-                CursorX = Margin;
-                CursorY += FONT_HEIGHT + LineSpacing;
-            } else {
-                DrawChar(CursorX, CursorY, c, TextColor);
-                CursorX += FONT_WIDTH;
-
-                if (CursorX + FONT_WIDTH > ScreenWidth - Margin) {
-                    if (CurrentLine < MAX_LINES - 1) {
-                        LineEndX[CurrentLine] = CursorX;
-                        CurrentLine++;
-                    }
-                    CursorX = Margin;
-                    CursorY += FONT_HEIGHT + LineSpacing;
-                }
-            }
-        }
-
-        int Dx, Dy;
-        uint8_t Buttons;
-
-        if (MouseGetDelta(&Dx, &Dy, &Buttons)) {
-            GotEvent = 1;
-
-            RestoreUnderCursor(MouseCursorX, MouseCursorY);
-
-            int NewX = (int)MouseCursorX + Dx;
-            int NewY = (int)MouseCursorY - Dy;
-
-            if (NewX < 0) {
-                NewX = 0;
-            }
-            if (NewX > (int)ScreenWidth - CURSOR_WIDTH) {
-                NewX = ScreenWidth - CURSOR_WIDTH;
-            }
-            if (NewY < 0) {
-                NewY = 0;
-            }
-            if (NewY > (int)ScreenHeight - CURSOR_HEIGHT) {
-                NewY = ScreenHeight - CURSOR_HEIGHT;
-            }
-
-            MouseCursorX = NewX;
-            MouseCursorY = NewY;
-
-            SaveUnderCursor(MouseCursorX, MouseCursorY);
-            DrawCursor(MouseCursorX, MouseCursorY, CursorColor);
-        }
-
-        if (!GotEvent) {
-            __asm__ __volatile__("hlt");
-        }
-    }
+    Sleep(3000);
+    ConsoleInit();
+    ShellRun();
 }
