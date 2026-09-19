@@ -11,6 +11,7 @@
 #define REG_CORBWP      0x48
 #define REG_CORBRP      0x4A
 #define REG_CORBCTL     0x4C
+#define REG_CORBSTS     0x4D
 #define REG_CORBSIZE    0x4E
 #define REG_RIRBLBASE   0x50
 #define REG_RIRBUBASE   0x54
@@ -347,6 +348,8 @@ HdaInit(uint32_t Bar0)
     Status.WpAfterFirst = 0;
     Status.WpBeforeSecond = 0;
     Status.CorbWpReadback = 0;
+    Status.CorbRpAfterFirst = 0;
+    Status.CorbSts = 0;
     Status.WidgetCount = 0;
     Status.DacFound = 0;
     Status.PinFound = 0;
@@ -392,6 +395,8 @@ HdaInit(uint32_t Bar0)
     Status.RepeatSameCallRaw = GetParam(0, PARAM_NODE_COUNT);
     Status.WpAfterFirst = LastRirbWp;
     Status.WpBeforeSecond = Read16(REG_RIRBWP) & 0xFF;
+    Status.CorbRpAfterFirst = Read16(REG_CORBRP) & 0xFF;
+    Status.CorbSts = Read8(REG_CORBSTS);
 
     uint8_t AfgNid = 0xFF;
     for (uint8_t i = 0; i < FgCount; i++) {
