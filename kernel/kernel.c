@@ -373,12 +373,14 @@ kmain(BOOT_INFO *Info)
 
         DrawString(20, 190, "wp1: ", TextColor);
         DrawUInt64(20 + 5 * FONT_WIDTH, 190, HdaStatus.WpAfterFirst, TextColor);
-        DrawString(20 + 8 * FONT_WIDTH, 190, "wp2before: ", TextColor);
-        DrawUInt64(20 + 19 * FONT_WIDTH, 190, HdaStatus.WpBeforeSecond, TextColor);
-        DrawString(20 + 22 * FONT_WIDTH, 190, "corbwp2: ", TextColor);
-        DrawUInt64(20 + 31 * FONT_WIDTH, 190, HdaStatus.CorbWpReadback, TextColor);
-        DrawString(20 + 34 * FONT_WIDTH, 190, "repeat: ", TextColor);
-        DrawUInt64(20 + 42 * FONT_WIDTH, 190, HdaStatus.RepeatSameCallRaw, TextColor);
+        DrawString(20 + 8 * FONT_WIDTH, 190, "wp2: ", TextColor);
+        DrawUInt64(20 + 13 * FONT_WIDTH, 190, HdaStatus.WpBeforeSecond, TextColor);
+        DrawString(20 + 16 * FONT_WIDTH, 190, "corbrp: ", TextColor);
+        DrawUInt64(20 + 24 * FONT_WIDTH, 190, HdaStatus.CorbRpAfterFirst, TextColor);
+        DrawString(20 + 27 * FONT_WIDTH, 190, "corbsts: ", TextColor);
+        DrawUInt64(20 + 36 * FONT_WIDTH, 190, HdaStatus.CorbSts, TextColor);
+        DrawString(20 + 38 * FONT_WIDTH, 190, "repeat: ", TextColor);
+        DrawUInt64(20 + 46 * FONT_WIDTH, 190, HdaStatus.RepeatSameCallRaw, TextColor);
 
         DrawString(20, 210, "HDA widgets: ", TextColor);
         DrawUInt64(20 + 13 * FONT_WIDTH, 210, HdaStatus.WidgetCount, TextColor);
