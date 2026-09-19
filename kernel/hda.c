@@ -65,6 +65,7 @@ static volatile uint32_t *Corb;
 static volatile uint64_t *Rirb;
 static uint16_t CorbEntries;
 static uint16_t RirbEntries;
+static uint16_t LastRirbWp;
 static uint16_t CorbWritePos;
 static uint16_t RirbReadPos;
 static uint8_t  CodecAddr;
@@ -172,6 +173,7 @@ SendVerb(uint8_t Nid, uint32_t Verb, uint32_t Payload)
             uint16_t Pos = (uint16_t)(Wp % RirbEntries);
             uint64_t Entry = Rirb[Pos];
             RirbReadPos = Wp;
+            LastRirbWp = Wp;
             Response = (uint32_t)(Entry & 0xFFFFFFFF);
             return Response;
         }
@@ -337,6 +339,9 @@ HdaInit(uint32_t Bar0)
     Status.RootFgCount = 0;
     Status.AfgFound = 0;
     Status.LastFgTypeRaw = 0;
+    Status.WpAfterFirst = 0;
+    Status.WpBeforeSecond = 0;
+    Status.CorbWpReadback = 0;
     Status.WidgetCount = 0;
     Status.DacFound = 0;
     Status.PinFound = 0;
@@ -378,12 +383,15 @@ HdaInit(uint32_t Bar0)
     uint8_t FgStart = (uint8_t)((RootNodeCount >> 16) & 0xFF);
     uint8_t FgCount = (uint8_t)(RootNodeCount & 0xFF);
     Status.RootFgCount = FgCount;
+    Status.WpAfterFirst = LastRirbWp;
+    Status.WpBeforeSecond = Read16(REG_RIRBWP) & 0xFF;
 
     uint8_t AfgNid = 0xFF;
     for (uint8_t i = 0; i < FgCount; i++) {
         uint8_t Nid = (uint8_t)(FgStart + i);
         uint32_t FgType = GetParam(Nid, PARAM_FUNCTION_GROUP_TYPE);
         Status.LastFgTypeRaw = FgType;
+        Status.CorbWpReadback = Read16(REG_CORBWP);
         if ((FgType & 0xFF) == 0x01) {
             AfgNid = Nid;
             break;
