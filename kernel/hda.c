@@ -20,7 +20,7 @@
 #define REG_RIRBCTL     0x5C
 #define REG_RIRBSTS     0x5D
 #define REG_RIRBSIZE    0x5E
-#define REG_SD0_BASE    0x80
+#define REG_SD_BASE     0x80
 #define SD_SIZE         0x20
 
 #define SDCTL_OFF   0x00
@@ -71,6 +71,7 @@ static uint16_t LastRirbWp;
 static uint16_t CorbWritePos;
 static uint16_t RirbReadPos;
 static uint8_t  CodecAddr;
+static uint32_t OutStreamBase;
 
 static void
 Wait(uint32_t Loops)
@@ -295,7 +296,7 @@ SetupStream(void)
     Bdl[2] = BufferBytes;
     Bdl[3] = 1;
 
-    uint32_t SdBase = REG_SD0_BASE;
+    uint32_t SdBase = OutStreamBase;
 
     Write8(SdBase + SDCTL_OFF, Read8(SdBase + SDCTL_OFF) | 0x01);
     for (int i = 0; i < 100000; i++) {
@@ -357,6 +358,7 @@ HdaInit(uint32_t Bar0)
     Status.StreamStarted = 0;
 
     HdaBase = (volatile uint8_t *)(uintptr_t)Bar0;
+    OutStreamBase = REG_SD_BASE + (uint32_t)((Read16(REG_GCAP) >> 8) & 0xF) * SD_SIZE;
 
     if (!ResetController()) {
         return Status;
@@ -447,7 +449,7 @@ HdaInit(uint32_t Bar0)
 void
 HdaPlayTestTone(void)
 {
-    uint32_t SdBase = REG_SD0_BASE;
+    uint32_t SdBase = OutStreamBase;
     Write8(SdBase + SDCTL_OFF, Read8(SdBase + SDCTL_OFF) | 0x02);
     Sleep(1500);
     Write8(SdBase + SDCTL_OFF, Read8(SdBase + SDCTL_OFF) & ~0x02);
