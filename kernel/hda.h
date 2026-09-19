@@ -8,6 +8,7 @@ typedef struct {
     uint32_t CorbEntriesUsed;
     uint32_t RirbEntriesUsed;
     uint32_t RootFgCount;
+    uint32_t FgStartNid;
     int AfgFound;
     uint32_t LastFgTypeRaw;
     uint32_t WpAfterFirst;
