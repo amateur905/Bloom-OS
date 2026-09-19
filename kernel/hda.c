@@ -338,6 +338,7 @@ HdaInit(uint32_t Bar0)
     Status.RirbEntriesUsed = 0;
     Status.RootFgCount = 0;
     Status.FgStartNid = 0;
+    Status.RepeatSameCallRaw = 0xFFFFFFFF;
     Status.AfgFound = 0;
     Status.LastFgTypeRaw = 0;
     Status.WpAfterFirst = 0;
@@ -385,6 +386,7 @@ HdaInit(uint32_t Bar0)
     uint8_t FgCount = (uint8_t)(RootNodeCount & 0xFF);
     Status.RootFgCount = FgCount;
     Status.FgStartNid = FgStart;
+    Status.RepeatSameCallRaw = GetParam(0, PARAM_NODE_COUNT);
     Status.WpAfterFirst = LastRirbWp;
     Status.WpBeforeSecond = Read16(REG_RIRBWP) & 0xFF;
 
