@@ -9,6 +9,7 @@ typedef struct {
     uint32_t RirbEntriesUsed;
     uint32_t RootFgCount;
     uint32_t FgStartNid;
+    uint32_t RepeatSameCallRaw;
     int AfgFound;
     uint32_t LastFgTypeRaw;
     uint32_t WpAfterFirst;
