@@ -142,7 +142,7 @@ SetupCorbRirb(void)
     Write32(REG_RIRBUBASE, 0);
     Write8(REG_RIRBSIZE, RirbSizeBits);
     Write16(REG_RIRBWP, 0x8000);
-    RirbReadPos = 0;
+    RirbReadPos = 0xFFFF;
     Write16(REG_RINTCNT, 1);
 
     Write8(REG_CORBCTL, 0x02);
@@ -169,9 +169,9 @@ SendVerb(uint8_t Nid, uint32_t Verb, uint32_t Payload)
     for (int i = 0; i < 1000000; i++) {
         uint16_t Wp = Read16(REG_RIRBWP) & 0xFF;
         if (Wp != RirbReadPos) {
-            uint16_t Pos = (uint16_t)((RirbReadPos + 1) % RirbEntries);
+            uint16_t Pos = (uint16_t)(Wp % RirbEntries);
             uint64_t Entry = Rirb[Pos];
-            RirbReadPos = Pos;
+            RirbReadPos = Wp;
             Response = (uint32_t)(Entry & 0xFFFFFFFF);
             return Response;
         }
