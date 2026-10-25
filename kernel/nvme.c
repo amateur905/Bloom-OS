@@ -163,12 +163,19 @@ SubmitIoCommand(NVME_COMMAND *Cmd)
     return 0xFFFF;
 }
 
+int NvmeDbgStage;
+uint64_t NvmeDbgCap;
+uint32_t NvmeDbgCsts;
+uint32_t NvmeDbgStatus;
+
 int
 NvmeInit(uint64_t Bar0)
 {
     NvmeBase = (volatile uint8_t *)(uintptr_t)Bar0;
 
     uint64_t Cap = Read64(REG_CAP);
+    NvmeDbgCap = Cap;
+    NvmeDbgCsts = Read32(REG_CSTS);
     DoorbellStride = 4u << ((Cap >> 32) & 0xF);
 
     Write32(REG_CC, Read32(REG_CC) & ~1u);
@@ -183,6 +190,7 @@ NvmeInit(uint64_t Bar0)
     void *AcqPage = AllocPage();
 
     if (!AsqPage || !AcqPage) {
+        NvmeDbgStage = 1;
         return 0;
     }
 
@@ -212,6 +220,8 @@ NvmeInit(uint64_t Bar0)
     }
 
     if (!Ready) {
+        NvmeDbgStage = 2;
+        NvmeDbgCsts = Read32(REG_CSTS);
         return 0;
     }
 
@@ -219,6 +229,7 @@ NvmeInit(uint64_t Bar0)
     void *IoCqPage = AllocPage();
 
     if (!IoSqPage || !IoCqPage) {
+        NvmeDbgStage = 3;
         return 0;
     }
 
@@ -238,7 +249,11 @@ NvmeInit(uint64_t Bar0)
     CreateCq.Cdw10 = ((QUEUE_DEPTH - 1) << 16) | 1;
     CreateCq.Cdw11 = 1;
 
-    if (SubmitAdminCommand(&CreateCq) != 0) {
+    NvmeDbgStatus = SubmitAdminCommand(&CreateCq);
+
+    if (NvmeDbgStatus != 0) {
+        NvmeDbgStage = 4;
+        NvmeDbgCsts = Read32(REG_CSTS);
         return 0;
     }
 
@@ -249,10 +264,15 @@ NvmeInit(uint64_t Bar0)
     CreateSq.Cdw10 = ((QUEUE_DEPTH - 1) << 16) | 1;
     CreateSq.Cdw11 = (1 << 16) | 1;
 
-    if (SubmitAdminCommand(&CreateSq) != 0) {
+    NvmeDbgStatus = SubmitAdminCommand(&CreateSq);
+
+    if (NvmeDbgStatus != 0) {
+        NvmeDbgStage = 5;
+        NvmeDbgCsts = Read32(REG_CSTS);
         return 0;
     }
 
+    NvmeDbgStage = 0;
     return 1;
 }
 

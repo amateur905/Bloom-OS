@@ -9,6 +9,7 @@
 
 void ConsoleInit(void);
 void ConsoleClear(void);
+void ConsoleRefresh(void);
 void ConsoleSetAttr(uint8_t Attr);
 void ConsolePutChar(char c);
 void ConsolePrint(const char *s);

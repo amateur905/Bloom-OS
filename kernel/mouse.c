@@ -44,15 +44,24 @@ MouseWrite(uint8_t Value)
 static volatile int AccumDx = 0;
 static volatile int AccumDy = 0;
 static volatile uint8_t MouseButtons = 0;
+static volatile uint8_t PressedLatch = 0;
+static uint8_t LastButtonState = 0;
 static volatile int MouseDataReady = 0;
 
 static uint8_t PacketBytes[3];
 static int PacketIndex = 0;
+static uint64_t LastByteTick = 0;
 
 static void
 MouseIrqHandler(void)
 {
     uint8_t Data = InB(0x60);
+
+    if (PacketIndex != 0 && TickCount - LastByteTick > 20) {
+        PacketIndex = 0;
+    }
+
+    LastByteTick = TickCount;
 
     if (PacketIndex == 0 && !(Data & 0x08)) {
         return;
@@ -69,10 +78,6 @@ MouseIrqHandler(void)
 
     uint8_t Status = PacketBytes[0];
 
-    if (Status & 0xC0) {
-        return;
-    }
-
     int Dx = PacketBytes[1];
     int Dy = PacketBytes[2];
 
@@ -86,6 +91,8 @@ MouseIrqHandler(void)
     AccumDx += Dx;
     AccumDy += Dy;
     MouseButtons = Status & 0x07;
+    PressedLatch |= (uint8_t)((Status & 0x07) & ~LastButtonState);
+    LastButtonState = Status & 0x07;
     MouseDataReady = 1;
 }
 
@@ -134,4 +141,12 @@ MouseGetDelta(int *Dx, int *Dy, uint8_t *Buttons)
     MouseDataReady = 0;
 
     return 1;
+}
+
+uint8_t
+MouseTakePressed(void)
+{
+    uint8_t Pressed = PressedLatch;
+    PressedLatch = 0;
+    return Pressed;
 }

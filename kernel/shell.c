@@ -2,10 +2,18 @@
 #include "shell.h"
 #include "console.h"
 #include "keyboard.h"
+#include "player.h"
+#include "explorer.h"
 #include "pmm.h"
 #include "blockdev.h"
 #include "hda.h"
+#include "klog.h"
+#include "power.h"
+#include "fs.h"
+#include "part.h"
 #include "io.h"
+#include "xhci.h"
+#include "usbmsc.h"
 
 #define LINE_MAX 256
 #define HISTORY_SIZE 16
@@ -202,15 +210,434 @@ CmdDisks(int Argc, char **Argv)
     (void)Argc;
     (void)Argv;
 
-    if (BlockDeviceReady()) {
-        ConsolePrint("Active block device: ");
-        ConsolePrint(BlockDeviceName());
-        ConsolePutChar('\n');
-    } else {
+    if (BlockDeviceCount() == 0) {
         ConsoleSetAttr(CONSOLE_ATTR_ERROR);
-        ConsolePrint("No block device\n");
+        ConsolePrint("No block devices\n");
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+        return;
+    }
+
+    for (int i = 0; i < BlockDeviceCount(); i++) {
+        ConsolePrint(BlockDeviceName(i));
+        ConsolePutChar('\n');
+    }
+}
+
+static void
+PrintPadded(const char *Text, int Width)
+{
+    int Length = 0;
+
+    while (Text[Length]) {
+        ConsolePutChar(Text[Length]);
+        Length++;
+    }
+
+    while (Length < Width) {
+        ConsolePutChar(' ');
+        Length++;
+    }
+}
+
+static int
+AppendUInt(char *Out, int Pos, uint64_t Value)
+{
+    char Digits[21];
+    int N = 0;
+
+    do {
+        Digits[N++] = (char)('0' + (Value % 10));
+        Value /= 10;
+    } while (Value > 0);
+
+    while (N > 0) {
+        Out[Pos++] = Digits[--N];
+    }
+
+    return Pos;
+}
+
+static int
+AppendText(char *Out, int Pos, const char *Text)
+{
+    while (*Text) {
+        Out[Pos++] = *Text++;
+    }
+    return Pos;
+}
+
+static void
+FormatSize(char *Out, uint64_t Sectors)
+{
+    uint64_t Bytes = Sectors * 512;
+    int Pos = 0;
+
+    if (Sectors == 0) {
+        Out[0] = '-';
+        Out[1] = 0;
+        return;
+    }
+
+    if (Bytes >= (1ULL << 30)) {
+        uint64_t Mb = Bytes >> 20;
+        uint64_t Tenths = Mb * 10 / 1024;
+        Pos = AppendUInt(Out, Pos, Tenths / 10);
+        Out[Pos++] = '.';
+        Pos = AppendUInt(Out, Pos, Tenths % 10);
+        Pos = AppendText(Out, Pos, " GB");
+    } else if (Bytes >= (1ULL << 20)) {
+        Pos = AppendUInt(Out, Pos, Bytes >> 20);
+        Pos = AppendText(Out, Pos, " MB");
+    } else {
+        Pos = AppendUInt(Out, Pos, Bytes >> 10);
+        Pos = AppendText(Out, Pos, " KB");
+    }
+
+    Out[Pos] = 0;
+}
+
+static int
+IsMounted(const char *PartName)
+{
+    for (int v = 0; v < FsVolumeCount(); v++) {
+        if (StrEq(FsVolumeName(v), PartName)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void
+CmdLsblk(int Argc, char **Argv)
+{
+    (void)Argc;
+    (void)Argv;
+
+    if (BlockDeviceCount() == 0) {
+        ConsoleSetAttr(CONSOLE_ATTR_ERROR);
+        ConsolePrint("No block devices\n");
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+        return;
+    }
+
+    ConsoleSetAttr(CONSOLE_ATTR_DIM);
+    PrintPadded("NAME", 12);
+    PrintPadded("SIZE", 11);
+    PrintPadded("TABLE", 7);
+    PrintPadded("TYPE", 22);
+    PrintPadded("FS", 10);
+    ConsolePrint("STATE\n");
+    ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+
+    for (int d = 0; d < BlockDeviceCount(); d++) {
+        ConsoleSetAttr(CONSOLE_ATTR_ACCENT);
+        ConsolePrint(BlockDeviceName(d));
+        ConsolePutChar('\n');
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+
+        for (int i = 0; i < PartCount(); i++) {
+            const PART_INFO *P = PartGet(i);
+
+            if (P->Device != d) {
+                continue;
+            }
+
+            char Size[24];
+            FormatSize(Size, P->SectorCount);
+
+            ConsolePrint("  ");
+            PrintPadded(P->Name, 10);
+            PrintPadded(Size, 11);
+            PrintPadded(P->Scheme == PART_SCHEME_GPT ? "GPT" : (P->Scheme == PART_SCHEME_MBR ? "MBR" : "none"), 7);
+            PrintPadded(PartTypeName(P), 22);
+            PrintPadded(PartFsName(P->Fs), 10);
+            ConsolePrint(IsMounted(P->Name) ? "mounted" : "-");
+            ConsolePutChar('\n');
+        }
+    }
+}
+
+static void
+PrintFsError(int Code)
+{
+    ConsoleSetAttr(CONSOLE_ATTR_ERROR);
+    ConsolePrint(FsErrorText(Code));
+    ConsolePutChar('\n');
+    ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+}
+
+static void
+PrintEntryLine(const FAT_ENTRY *E)
+{
+    char Flags[5];
+    Flags[0] = (E->Attr & FAT_ATTR_READ_ONLY) ? 'r' : '-';
+    Flags[1] = (E->Attr & FAT_ATTR_HIDDEN) ? 'h' : '-';
+    Flags[2] = (E->Attr & FAT_ATTR_SYSTEM) ? 's' : '-';
+    Flags[3] = ' ';
+    Flags[4] = 0;
+    ConsolePrint(Flags);
+
+    if (E->Attr & FAT_ATTR_DIRECTORY) {
+        ConsoleSetAttr(CONSOLE_ATTR_ACCENT);
+        PrintPadded("<DIR>", 11);
+        ConsolePrint(E->Name);
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+    } else {
+        char Text[16];
+        int Len = AppendUInt(Text, 0, E->Size);
+        Text[Len] = 0;
+        for (int i = Len; i < 10; i++) {
+            ConsolePutChar(' ');
+        }
+        ConsolePrint(Text);
+        ConsolePutChar(' ');
+        ConsolePrint(E->Name);
+    }
+
+    ConsolePutChar('\n');
+}
+
+static int
+LsCallback(const FAT_ENTRY *Entry, void *Context)
+{
+    (*(int *)Context)++;
+    PrintEntryLine(Entry);
+    return 0;
+}
+
+static void
+CmdLs(int Argc, char **Argv)
+{
+    static FS_NODE Node;
+
+    if (FsVolumeCount() == 0) {
+        ConsoleSetAttr(CONSOLE_ATTR_ERROR);
+        ConsolePrint("No FAT32 volumes mounted (see lsblk)\n");
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+        return;
+    }
+
+    int Status = FsResolve(Argc > 1 ? Argv[1] : ".", &Node);
+
+    if (Status != FS_OK) {
+        PrintFsError(Status);
+        return;
+    }
+
+    if (!Node.IsDir) {
+        PrintEntryLine(&Node.Entry);
+        return;
+    }
+
+    int Count = 0;
+    Status = FsList(&Node, LsCallback, &Count);
+
+    if (Status != FS_OK) {
+        PrintFsError(Status);
+        return;
+    }
+
+    ConsoleSetAttr(CONSOLE_ATTR_DIM);
+    ConsolePrintUInt((uint64_t)Count);
+    ConsolePrint(Count == 1 ? " entry\n" : " entries\n");
+    ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+}
+
+static void
+CmdPwd(int Argc, char **Argv)
+{
+    (void)Argc;
+    (void)Argv;
+
+    if (!FsHasCwd()) {
+        PrintFsError(FS_ERR_NOVOLUME);
+        return;
+    }
+
+    ConsolePrint(FsCwdVolume());
+    ConsolePutChar(':');
+    ConsolePrint(FsCwdPath());
+    ConsolePutChar('\n');
+}
+
+static void
+CmdCd(int Argc, char **Argv)
+{
+    if (Argc < 2) {
+        CmdPwd(Argc, Argv);
+        return;
+    }
+
+    int Status = FsChdir(Argv[1]);
+
+    if (Status != FS_OK) {
+        PrintFsError(Status);
+    }
+}
+
+static int
+ParseNumber(const char *Text, uint32_t *Out)
+{
+    uint32_t Value = 0;
+    int Base = 10;
+
+    if (Text[0] == '0' && (Text[1] == 'x' || Text[1] == 'X')) {
+        Base = 16;
+        Text += 2;
+    }
+
+    if (*Text == 0) {
+        return 0;
+    }
+
+    while (*Text) {
+        char c = *Text++;
+        uint32_t Digit;
+
+        if (c >= '0' && c <= '9') {
+            Digit = (uint32_t)(c - '0');
+        } else if (Base == 16 && c >= 'a' && c <= 'f') {
+            Digit = (uint32_t)(c - 'a' + 10);
+        } else if (Base == 16 && c >= 'A' && c <= 'F') {
+            Digit = (uint32_t)(c - 'A' + 10);
+        } else {
+            return 0;
+        }
+
+        Value = Value * (uint32_t)Base + Digit;
+    }
+
+    *Out = Value;
+    return 1;
+}
+
+static void
+CmdHexdump(int Argc, char **Argv)
+{
+    static FS_NODE Node;
+    static uint8_t Bytes[512];
+
+    if (Argc < 2) {
+        ConsolePrint("usage: hexdump <file> [offset] [length]\n");
+        return;
+    }
+
+    uint32_t Offset = 0;
+    uint32_t Length = 128;
+
+    if (Argc > 2 && !ParseNumber(Argv[2], &Offset)) {
+        ConsolePrint("bad offset\n");
+        return;
+    }
+
+    if (Argc > 3 && !ParseNumber(Argv[3], &Length)) {
+        ConsolePrint("bad length\n");
+        return;
+    }
+
+    if (Length > sizeof(Bytes)) {
+        Length = sizeof(Bytes);
+    }
+
+    int Status = FsResolve(Argv[1], &Node);
+
+    if (Status != FS_OK) {
+        PrintFsError(Status);
+        return;
+    }
+
+    if (Node.IsDir) {
+        ConsolePrint("is a directory\n");
+        return;
+    }
+
+    uint32_t Got = FsRead(&Node, Offset, Bytes, Length);
+
+    for (uint32_t i = 0; i < Got; i += 16) {
+        ConsolePrintHex(Offset + i, 8);
+        ConsolePrint("  ");
+
+        for (uint32_t j = 0; j < 16; j++) {
+            if (i + j < Got) {
+                ConsolePrintHex(Bytes[i + j], 2);
+                ConsolePutChar(' ');
+            } else {
+                ConsolePrint("   ");
+            }
+        }
+
+        ConsolePutChar(' ');
+
+        for (uint32_t j = 0; j < 16 && i + j < Got; j++) {
+            uint8_t c = Bytes[i + j];
+            ConsolePutChar((c >= 32 && c <= 126) ? (char)c : '.');
+        }
+
+        ConsolePutChar('\n');
+    }
+
+    if (Got == 0) {
+        ConsolePrint("nothing to read at this offset\n");
+    }
+}
+
+static void
+CmdCat(int Argc, char **Argv)
+{
+    static FS_NODE Node;
+    static uint8_t Chunk[1024];
+
+    if (Argc < 2) {
+        ConsolePrint("usage: cat <file>\n");
+        return;
+    }
+
+    int Status = FsResolve(Argv[1], &Node);
+
+    if (Status != FS_OK) {
+        PrintFsError(Status);
+        return;
+    }
+
+    if (Node.IsDir) {
+        ConsoleSetAttr(CONSOLE_ATTR_ERROR);
+        ConsolePrint("is a directory\n");
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+        return;
+    }
+
+    uint32_t Offset = 0;
+    uint32_t Limit = 65536;
+
+    while (Offset < Limit) {
+        uint32_t Got = FsRead(&Node, Offset, Chunk, sizeof(Chunk));
+
+        if (Got == 0) {
+            break;
+        }
+
+        for (uint32_t i = 0; i < Got; i++) {
+            uint8_t c = Chunk[i];
+
+            if (c == '\n' || c == '\t') {
+                ConsolePutChar((char)c);
+            } else if (c >= 32 && c <= 126) {
+                ConsolePutChar((char)c);
+            } else if (c != '\r') {
+                ConsolePutChar('.');
+            }
+        }
+
+        Offset += Got;
+    }
+
+    if (Offset < Node.Entry.Size) {
+        ConsoleSetAttr(CONSOLE_ATTR_DIM);
+        ConsolePrint("\n[truncated at 64 KB]");
         ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
     }
+
+    ConsolePutChar('\n');
 }
 
 static void
@@ -228,18 +655,91 @@ CmdHda(int Argc, char **Argv)
 
     PrintKeyValue("codec", (uint64_t)GlobalHdaStatus.CodecFound);
     ConsolePrint("  ");
+    PrintKeyValue("corb", GlobalHdaStatus.CorbEntriesUsed);
+    ConsolePrint("  ");
+    PrintKeyValue("rirb", GlobalHdaStatus.RirbEntriesUsed);
+    ConsolePutChar('\n');
+    PrintKeyValue("fgcount", GlobalHdaStatus.RootFgCount);
+    ConsolePrint("  ");
+    PrintKeyValue("fgstart", GlobalHdaStatus.FgStartNid);
+    ConsolePrint("  ");
     PrintKeyValue("afg", (uint64_t)GlobalHdaStatus.AfgFound);
+    ConsolePrint("  fgtype: 0x");
+    ConsolePrintHex(GlobalHdaStatus.LastFgTypeRaw, 1);
+    ConsolePutChar('\n');
+    PrintKeyValue("wp1", GlobalHdaStatus.WpAfterFirst);
+    ConsolePrint("  ");
+    PrintKeyValue("wp2", GlobalHdaStatus.WpBeforeSecond);
+    ConsolePrint("  ");
+    PrintKeyValue("corbwp", GlobalHdaStatus.CorbWpReadback);
+    ConsolePrint("  ");
+    PrintKeyValue("corbrp", GlobalHdaStatus.CorbRpAfterFirst);
+    ConsolePrint("  ");
+    PrintKeyValue("corbsts", GlobalHdaStatus.CorbSts);
+    ConsolePrint("  repeat: 0x");
+    ConsolePrintHex(GlobalHdaStatus.RepeatSameCallRaw, 1);
     ConsolePutChar('\n');
     PrintKeyValue("widgets", GlobalHdaStatus.WidgetCount);
     ConsolePrint("  ");
     PrintKeyValue("dac", (uint64_t)GlobalHdaStatus.DacFound);
     ConsolePrint("  ");
     PrintKeyValue("pin", (uint64_t)GlobalHdaStatus.PinFound);
-    ConsolePutChar('\n');
+    ConsolePrint("  ");
     PrintKeyValue("path", (uint64_t)GlobalHdaStatus.PathLinked);
     ConsolePrint("  ");
     PrintKeyValue("stream", (uint64_t)GlobalHdaStatus.StreamStarted);
     ConsolePutChar('\n');
+}
+
+static char
+LowerChar(char c)
+{
+    if (c >= 'A' && c <= 'Z') {
+        return (char)(c - 'A' + 'a');
+    }
+    return c;
+}
+
+static int
+LineHasPrefix(const char *Line, const char *Prefix)
+{
+    while (*Prefix) {
+        if (*Line == 0 || *Line == '\n' || LowerChar(*Line) != LowerChar(*Prefix)) {
+            return 0;
+        }
+        Line++;
+        Prefix++;
+    }
+    return 1;
+}
+
+static void
+CmdDmesg(int Argc, char **Argv)
+{
+    const char *Text = KLogText();
+
+    if (Argc < 2) {
+        ConsolePrint(Text);
+        return;
+    }
+
+    while (*Text) {
+        int Match = LineHasPrefix(Text, Argv[1]);
+
+        while (*Text && *Text != '\n') {
+            if (Match) {
+                ConsolePutChar(*Text);
+            }
+            Text++;
+        }
+
+        if (*Text == '\n') {
+            if (Match) {
+                ConsolePutChar('\n');
+            }
+            Text++;
+        }
+    }
 }
 
 static void
@@ -261,6 +761,33 @@ CmdBeep(int Argc, char **Argv)
 }
 
 static void
+CmdPlay(int Argc, char **Argv)
+{
+    if (Argc < 2) {
+        ConsolePrint("usage: play <file.wav>\n");
+        return;
+    }
+
+    if (!GlobalHdaFound || !GlobalHdaStatus.StreamStarted) {
+        ConsoleSetAttr(CONSOLE_ATTR_ERROR);
+        ConsolePrint("HDA stream is not available\n");
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+        return;
+    }
+
+    PlayWavFile(Argv[1]);
+}
+
+static void
+CmdExplorer(int Argc, char **Argv)
+{
+    (void)Argc;
+    (void)Argv;
+
+    ExplorerRun();
+}
+
+static void
 CmdReboot(int Argc, char **Argv)
 {
     (void)Argc;
@@ -268,18 +795,133 @@ CmdReboot(int Argc, char **Argv)
 
     ConsolePrint("Rebooting...\n");
     ConsoleFlush();
+    PowerReboot();
+}
 
-    OutB(0x64, 0xFE);
+static void
+CmdShutdown(int Argc, char **Argv)
+{
+    (void)Argc;
+    (void)Argv;
 
-    for (volatile int i = 0; i < 100000000; i++) {
+    ConsolePrint("Shutting down...\n");
+    ConsoleFlush();
+
+    if (!PowerShutdown()) {
+        ConsoleSetAttr(CONSOLE_ATTR_ERROR);
+        ConsolePrint("Shutdown failed: ACPI power off is not available\n");
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+    }
+}
+
+static int
+AppendHex4(char *Out, int Pos, uint16_t Value)
+{
+    for (int Shift = 12; Shift >= 0; Shift -= 4) {
+        uint8_t Nib = (uint8_t)((Value >> Shift) & 0xF);
+        Out[Pos++] = (char)(Nib < 10 ? '0' + Nib : 'a' + Nib - 10);
+    }
+    return Pos;
+}
+
+static void
+CmdUsb(int Argc, char **Argv)
+{
+    if (Argc > 1 && StrEq(Argv[1], "list")) {
+        int Shown = 0;
+
+        for (int i = 0; i < XhciDeviceCount(); i++) {
+            USB_DEVICE *D = XhciDevice(i);
+
+            if (!D) {
+                continue;
+            }
+
+            char Text[96];
+            int Pos = 0;
+
+            Pos = AppendText(Text, Pos, "port ");
+            Pos = AppendUInt(Text, Pos, (uint64_t)D->Port);
+            Pos = AppendText(Text, Pos, "  ");
+            Pos = AppendText(Text, Pos, UsbSpeedName(D->Speed));
+            Pos = AppendText(Text, Pos, "  ");
+            Pos = AppendHex4(Text, Pos, D->VendorId);
+            Pos = AppendText(Text, Pos, ":");
+            Pos = AppendHex4(Text, Pos, D->ProductId);
+            Pos = AppendText(Text, Pos, "  ");
+
+            if (D->HubSeen) {
+                Pos = AppendText(Text, Pos, "hub (unsupported)");
+            } else if (D->IsMass) {
+                char Names[48];
+                UsbMscBlocks(D, Names, 48);
+                Pos = AppendText(Text, Pos, "storage ");
+                Pos = AppendText(Text, Pos, Names);
+            } else {
+                Pos = AppendText(Text, Pos, "other");
+            }
+
+            Text[Pos] = 0;
+            ConsolePrint(Text);
+            ConsolePutChar('\n');
+            Shown++;
+        }
+
+        if (!Shown) {
+            ConsolePrint("No USB devices enumerated. Run 'usb' to scan.\n");
+        }
+
+        return;
     }
 
-    struct {
-        uint16_t Limit;
-        uint64_t Base;
-    } __attribute__((packed)) NullIdt = {0, 0};
+    int New[32];
+    int Removed = 0;
 
-    __asm__ __volatile__("lidt %0; int3" : : "m"(NullIdt));
+    ConsolePrint("Scanning USB...\n");
+
+    int Count = UsbScan(New, 32, &Removed);
+
+    if (Count < 0) {
+        ConsoleSetAttr(CONSOLE_ATTR_ERROR);
+        ConsolePrint("No working xHCI controller. See: dmesg XHCI\n");
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+        return;
+    }
+
+    for (int i = 0; i < Count; i++) {
+        int Index = New[i];
+        int Volumes = FsMountDevice(Index);
+        char Size[24];
+        char Text[80];
+        int Pos = 0;
+
+        FormatSize(Size, BlockSize512(Index));
+
+        ConsoleSetAttr(CONSOLE_ATTR_ACCENT);
+        PrintPadded(BlockDeviceName(Index), 8);
+        ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
+        PrintPadded(Size, 11);
+
+        Pos = AppendText(Text, Pos, "sector ");
+        Pos = AppendUInt(Text, Pos, BlockSectorSize(Index));
+        Pos = AppendText(Text, Pos, ", ");
+        Pos = AppendUInt(Text, Pos, (uint64_t)Volumes);
+        Pos = AppendText(Text, Pos, " volume(s) mounted\n");
+        Text[Pos] = 0;
+        ConsolePrint(Text);
+    }
+
+    if (Removed > 0) {
+        char Text[48];
+        int Pos = AppendUInt(Text, 0, (uint64_t)Removed);
+        Pos = AppendText(Text, Pos, " device(s) removed\n");
+        Text[Pos] = 0;
+        ConsolePrint(Text);
+    }
+
+    if (Count == 0 && Removed == 0) {
+        ConsolePrint("No new USB storage devices. See: dmesg USB\n");
+    }
 }
 
 static const COMMAND Commands[] = {
@@ -288,10 +930,21 @@ static const COMMAND Commands[] = {
     {"echo",   "print arguments",           CmdEcho},
     {"mem",    "show memory usage",         CmdMem},
     {"lspci",  "list PCI devices",          CmdLspci},
-    {"disks",  "show active block device",  CmdDisks},
+    {"disks",  "list block devices",        CmdDisks},
+    {"lsblk",  "list disks and partitions", CmdLsblk},
+    {"usb",    "scan USB storage [list]",   CmdUsb},
+    {"ls",     "list directory",            CmdLs},
+    {"cd",     "change directory",          CmdCd},
+    {"pwd",    "print current directory",   CmdPwd},
+    {"cat",    "print a text file",         CmdCat},
+    {"hexdump","hex view of a file",        CmdHexdump},
     {"hda",    "show audio controller state", CmdHda},
+    {"dmesg",  "show boot log [prefix]",    CmdDmesg},
     {"beep",   "play test tone via HDA",    CmdBeep},
+    {"play",   "play a WAV file",           CmdPlay},
+    {"explorer","visual file explorer",     CmdExplorer},
     {"reboot", "restart the machine",       CmdReboot},
+    {"shutdown", "power off the machine",   CmdShutdown},
 };
 
 #define COMMAND_COUNT ((int)(sizeof(Commands) / sizeof(Commands[0])))
@@ -337,6 +990,17 @@ Execute(void)
         if (!*p) {
             break;
         }
+        if (*p == '"') {
+            p++;
+            Argv[Argc++] = p;
+            while (*p && *p != '"') {
+                p++;
+            }
+            if (*p) {
+                *p++ = 0;
+            }
+            continue;
+        }
         Argv[Argc++] = p;
         while (*p && *p != ' ') {
             p++;
@@ -365,7 +1029,14 @@ static void
 PrintPrompt(void)
 {
     ConsoleSetAttr(CONSOLE_ATTR_ACCENT);
-    ConsolePrint("bloom> ");
+    ConsolePrint("bloom");
+    if (FsHasCwd()) {
+        ConsolePutChar(' ');
+        ConsolePrint(FsCwdVolume());
+        ConsolePutChar(':');
+        ConsolePrint(FsCwdPath());
+    }
+    ConsolePrint("> ");
     ConsoleSetAttr(CONSOLE_ATTR_NORMAL);
 }
 

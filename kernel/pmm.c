@@ -114,6 +114,18 @@ InitPmm(BOOT_INFO *Info)
         SetBit(BitmapStartPage + p);
         FreePages--;
     }
+
+    uint64_t Reserved = 256;
+    if (Reserved > TotalPages) {
+        Reserved = TotalPages;
+    }
+
+    for (uint64_t p = 0; p < Reserved; p++) {
+        if (!TestBit(p)) {
+            SetBit(p);
+            FreePages--;
+        }
+    }
 }
 
 void *

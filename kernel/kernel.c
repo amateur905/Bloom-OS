@@ -10,10 +10,13 @@
 #include "pmm.h"
 #include "pci.h"
 #include "ahci.h"
-#include "fat32.h"
+#include "fs.h"
+#include "part.h"
 #include "blockdev.h"
 #include "nvme.h"
 #include "hda.h"
+#include "klog.h"
+#include "power.h"
 
 static void
 DrawLogo(uint32_t OffsetX, uint32_t OffsetY)
@@ -118,6 +121,51 @@ PlayStartupChime(void)
     PlayPhrase(Group5Freqs, Group5Durations, 3);
 }
 
+static void
+LogHdaStatus(const HDA_STATUS *S)
+{
+    KLog("HDA: codec=");
+    KLogUInt((uint64_t)S->CodecFound);
+    KLog(" corb=");
+    KLogUInt(S->CorbEntriesUsed);
+    KLog(" rirb=");
+    KLogUInt(S->RirbEntriesUsed);
+    KLog("\n");
+    KLog("HDA: fgcount=");
+    KLogUInt(S->RootFgCount);
+    KLog(" fgstart=");
+    KLogUInt(S->FgStartNid);
+    KLog(" afg=");
+    KLogUInt((uint64_t)S->AfgFound);
+    KLog(" fgtype=");
+    KLogHex(S->LastFgTypeRaw, 1);
+    KLog("\n");
+    KLog("HDA: wp1=");
+    KLogUInt(S->WpAfterFirst);
+    KLog(" wp2=");
+    KLogUInt(S->WpBeforeSecond);
+    KLog(" corbwp=");
+    KLogUInt(S->CorbWpReadback);
+    KLog(" corbrp=");
+    KLogUInt(S->CorbRpAfterFirst);
+    KLog(" corbsts=");
+    KLogUInt(S->CorbSts);
+    KLog(" repeat=");
+    KLogHex(S->RepeatSameCallRaw, 1);
+    KLog("\n");
+    KLog("HDA: widgets=");
+    KLogUInt(S->WidgetCount);
+    KLog(" dac=");
+    KLogUInt((uint64_t)S->DacFound);
+    KLog(" pin=");
+    KLogUInt((uint64_t)S->PinFound);
+    KLog(" path=");
+    KLogUInt((uint64_t)S->PathLinked);
+    KLog(" stream=");
+    KLogUInt((uint64_t)S->StreamStarted);
+    KLog("\n");
+}
+
 void
 kmain(BOOT_INFO *Info)
 {
@@ -133,6 +181,15 @@ kmain(BOOT_INFO *Info)
     FillScreen(0x0000FF00);
     EnableInterrupts();
     InitPmm(Info);
+
+    KLog("Bloom-OS boot log\n");
+    KLog("PMM: pages free ");
+    KLogUInt(GetFreePageCount());
+    KLog(" / total ");
+    KLogUInt(GetTotalPageCount());
+    KLog("\n");
+
+    PowerInit(Info->AcpiRsdp);
 
     FillScreen(0x000000FF);
 
@@ -164,58 +221,70 @@ kmain(BOOT_INFO *Info)
         DrawString(20, 30, "AHCI found, ABAR: ", TextColor);
         DrawUInt64(20 + 18 * FONT_WIDTH, 30, Ahci.Abar, TextColor);
 
+        KLogPci("AHCI", Ahci.Bus, Ahci.Device, Ahci.Function, Ahci.VendorId, Ahci.DeviceId);
+        KLog("AHCI: abar ");
+        KLogHex(Ahci.Abar, 8);
+        KLog(", pci command was ");
+        KLogHex(PciEnableDevice(Ahci.Bus, Ahci.Device, Ahci.Function), 4);
+        KLog("\n");
+
         if (AhciInit(Ahci.Abar)) {
-            RegisterBlockDevice(AhciReadSectors, "AHCI");
+            BlockRegister("sata0", AhciReadSectors);
+            KLog("AHCI: init ok\n");
         } else {
             DrawString(20, 50, "AHCI port init failed", TextColor);
+            KLog("AHCI: init failed\n");
         }
     } else {
         DrawString(20, 30, "AHCI not found", TextColor);
+        KLog("AHCI: not found\n");
     }
 
-    if (!BlockDeviceReady()) {
+    {
         NVME_LOCATION Nvme = FindNvmeController();
 
         if (Nvme.Found) {
             DrawString(20, 110, "NVMe found", TextColor);
 
+            KLogPci("NVMe", Nvme.Bus, Nvme.Device, Nvme.Function, Nvme.VendorId, Nvme.DeviceId);
+            KLog("NVMe: bar0 ");
+            KLogHex(Nvme.Bar0, 8);
+            KLog(", pci command was ");
+            KLogHex(PciEnableDevice(Nvme.Bus, Nvme.Device, Nvme.Function), 4);
+            KLog("\n");
+
             if (NvmeInit(Nvme.Bar0)) {
-                RegisterBlockDevice(NvmeReadSectors, "NVMe");
+                BlockRegister("nvme0", NvmeReadSectors);
                 DrawString(20, 130, "NVMe init OK", TextColor);
+                KLog("NVMe: init ok\n");
             } else {
                 DrawString(20, 130, "NVMe init failed", TextColor);
+                KLog("NVMe: init failed, stage ");
+                KLogUInt((uint64_t)NvmeDbgStage);
+                KLog(", status ");
+                KLogHex(NvmeDbgStatus, 1);
+                KLog(", cap ");
+                KLogHex(NvmeDbgCap, 1);
+                KLog(", csts ");
+                KLogHex(NvmeDbgCsts, 1);
+                KLog("\n");
             }
         } else {
             DrawString(20, 110, "NVMe not found", TextColor);
+            KLog("NVMe: not found\n");
         }
     }
 
-    if (BlockDeviceReady()) {
-        uint8_t *SectorBuffer = (uint8_t *)AllocPage();
-
-        if (BlockReadSectors(0, 1, SectorBuffer)) {
-            if (SectorBuffer[510] == 0x55 && SectorBuffer[511] == 0xAA) {
-                DrawString(20, 50, "Disk read OK, boot sig valid", TextColor);
-
-                if (FatInit()) {
-                    FAT_FILE File = FatFindFile("KERNEL  BIN");
-
-                    if (File.Found) {
-                        DrawString(20, 70, "FAT32: KERNEL.BIN size ", TextColor);
-                        DrawUInt64(20 + 23 * FONT_WIDTH, 70, File.Size, TextColor);
-                    } else {
-                        DrawString(20, 70, "FAT32: KERNEL.BIN not found", TextColor);
-                    }
-                } else {
-                    DrawString(20, 70, "FAT32 init failed", TextColor);
-                }
-            } else {
-                DrawString(20, 50, "Disk read OK, bad boot sig", TextColor);
-            }
-        } else {
-            DrawString(20, 50, "Disk read failed", TextColor);
-        }
+    if (BlockDeviceCount() == 0) {
+        KLog("Disk: no block device\n");
     }
+
+    int Mounted = FsInit();
+
+    DrawString(20, 50, "Block devices: ", TextColor);
+    DrawUInt64(20 + 15 * FONT_WIDTH, 50, (uint64_t)BlockDeviceCount(), TextColor);
+    DrawString(20, 70, "FAT32 volumes mounted: ", TextColor);
+    DrawUInt64(20 + 23 * FONT_WIDTH, 70, (uint64_t)Mounted, TextColor);
 
     HDA_LOCATION Hda = FindHdaController();
 
@@ -223,7 +292,29 @@ kmain(BOOT_INFO *Info)
         DrawString(20, 90, "HDA found, BAR0: ", TextColor);
         DrawUInt64(20 + 17 * FONT_WIDTH, 90, Hda.Bar0, TextColor);
 
+        KLogPci("HDA", Hda.Bus, Hda.Device, Hda.Function, Hda.VendorId, Hda.DeviceId);
+        KLog("HDA: bar0 ");
+        KLogHex(Hda.Bar0, 8);
+        KLog(", pci command was ");
+        KLogHex(PciEnableDevice(Hda.Bus, Hda.Device, Hda.Function), 4);
+        KLog("\n");
+
+        if (Hda.VendorId == 0x8086) {
+            uint32_t Tcsel = PciConfigRead32(Hda.Bus, Hda.Device, Hda.Function, 0x44);
+            uint32_t Devc = PciConfigRead32(Hda.Bus, Hda.Device, Hda.Function, 0x78);
+
+            KLog("HDA: pci 0x44 was ");
+            KLogHex(Tcsel, 8);
+            KLog(", 0x78 was ");
+            KLogHex(Devc, 8);
+            KLog("\n");
+
+            PciConfigWrite32(Hda.Bus, Hda.Device, Hda.Function, 0x44, Tcsel & ~0x07u);
+            PciConfigWrite32(Hda.Bus, Hda.Device, Hda.Function, 0x78, Devc & 0x0000F7FFu);
+        }
+
         HDA_STATUS HdaStatus = HdaInit(Hda.Bar0);
+        LogHdaStatus(&HdaStatus);
         GlobalHdaStatus = HdaStatus;
         GlobalHdaFound = 1;
 
@@ -271,6 +362,7 @@ kmain(BOOT_INFO *Info)
         }
     } else {
         DrawString(20, 90, "HDA not found", TextColor);
+        KLog("HDA: not found\n");
     }
 
     PlayStartupChime();

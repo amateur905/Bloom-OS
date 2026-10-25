@@ -13,6 +13,7 @@ typedef struct {
     uint64_t MemoryMapSize;
     uint64_t MemoryMapDescriptorSize;
     uint32_t MemoryMapDescriptorVersion;
+    uint64_t AcpiRsdp;
 } BOOT_INFO;
 
 #endif

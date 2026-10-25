@@ -26,3 +26,17 @@ typedef struct {
 
 HDA_STATUS HdaInit(uint32_t Bar0);
 void HdaPlayTestTone(void);
+
+#define HDA_STREAM_PAGE_BYTES 4096
+#define HDA_STREAM_PAGE_FRAMES (HDA_STREAM_PAGE_BYTES / 4)
+#define HDA_STREAM_ERR_UNAVAILABLE -1
+#define HDA_STREAM_ERR_RATE -2
+#define HDA_STREAM_ERR_MEMORY -3
+
+int HdaStreamOpen(uint32_t SampleRate);
+void *HdaStreamNextPage(void);
+void HdaStreamCommit(void);
+void HdaStreamStart(void);
+uint32_t HdaStreamFilled(void);
+uint32_t HdaStreamPlayed(void);
+void HdaStreamClose(void);

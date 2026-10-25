@@ -17,6 +17,44 @@ PciConfigReadDWord(uint8_t Bus, uint8_t Device, uint8_t Function, uint8_t Offset
     return InL(PCI_CONFIG_DATA);
 }
 
+static void
+PciConfigWriteDWord(uint8_t Bus, uint8_t Device, uint8_t Function, uint8_t Offset, uint32_t Value)
+{
+    uint32_t Address = (uint32_t)((1u << 31) |
+        ((uint32_t)Bus << 16) |
+        ((uint32_t)Device << 11) |
+        ((uint32_t)Function << 8) |
+        (Offset & 0xFC));
+
+    OutL(PCI_CONFIG_ADDRESS, Address);
+    OutL(PCI_CONFIG_DATA, Value);
+}
+
+uint32_t
+PciConfigRead32(uint8_t Bus, uint8_t Device, uint8_t Function, uint8_t Offset)
+{
+    return PciConfigReadDWord(Bus, Device, Function, Offset);
+}
+
+void
+PciConfigWrite32(uint8_t Bus, uint8_t Device, uint8_t Function, uint8_t Offset, uint32_t Value)
+{
+    PciConfigWriteDWord(Bus, Device, Function, Offset, Value);
+}
+
+uint16_t
+PciEnableDevice(uint8_t Bus, uint8_t Device, uint8_t Function)
+{
+    uint16_t Old = (uint16_t)(PciConfigReadDWord(Bus, Device, Function, 0x04) & 0xFFFF);
+    uint16_t New = (uint16_t)(Old | 0x0006);
+
+    if (New != Old) {
+        PciConfigWriteDWord(Bus, Device, Function, 0x04, New);
+    }
+
+    return Old;
+}
+
 AHCI_LOCATION
 FindAhciController(void)
 {
@@ -183,4 +221,64 @@ FindNvmeController(void)
     }
 
     return Result;
+}
+
+int
+PciFindByClass(uint8_t WantClass, uint8_t WantSub, int WantProgIf, int Skip, PCI_DEVICE_INFO *Out)
+{
+    int Seen = 0;
+
+    for (uint32_t Bus = 0; Bus < 256; Bus++) {
+        for (uint32_t Device = 0; Device < 32; Device++) {
+            for (uint32_t Function = 0; Function < 8; Function++) {
+                uint32_t IdReg = PciConfigReadDWord((uint8_t)Bus, (uint8_t)Device, (uint8_t)Function, 0x00);
+                uint16_t VendorId = (uint16_t)(IdReg & 0xFFFF);
+
+                if (VendorId == 0xFFFF) {
+                    if (Function == 0) {
+                        break;
+                    }
+                    continue;
+                }
+
+                uint32_t ClassReg = PciConfigReadDWord((uint8_t)Bus, (uint8_t)Device, (uint8_t)Function, 0x08);
+                uint8_t ClassCode = (uint8_t)(ClassReg >> 24);
+                uint8_t SubClass = (uint8_t)(ClassReg >> 16);
+                uint8_t ProgIf = (uint8_t)(ClassReg >> 8);
+
+                if (ClassCode == WantClass && SubClass == WantSub && (WantProgIf < 0 || ProgIf == (uint8_t)WantProgIf)) {
+                    if (Seen == Skip) {
+                        uint32_t Bar0Low = PciConfigReadDWord((uint8_t)Bus, (uint8_t)Device, (uint8_t)Function, 0x10);
+                        uint64_t Bar0 = Bar0Low & 0xFFFFFFF0;
+
+                        if (!(Bar0Low & 1) && ((Bar0Low >> 1) & 3) == 2) {
+                            uint32_t Bar0High = PciConfigReadDWord((uint8_t)Bus, (uint8_t)Device, (uint8_t)Function, 0x14);
+                            Bar0 |= (uint64_t)Bar0High << 32;
+                        }
+
+                        Out->Bus = (uint8_t)Bus;
+                        Out->Device = (uint8_t)Device;
+                        Out->Function = (uint8_t)Function;
+                        Out->VendorId = VendorId;
+                        Out->DeviceId = (uint16_t)(IdReg >> 16);
+                        Out->ClassCode = ClassCode;
+                        Out->SubClass = SubClass;
+                        Out->ProgIf = ProgIf;
+                        Out->Bar0 = Bar0;
+                        return 1;
+                    }
+                    Seen++;
+                }
+
+                uint32_t HeaderTypeReg = PciConfigReadDWord((uint8_t)Bus, (uint8_t)Device, (uint8_t)Function, 0x0C);
+                uint8_t HeaderType = (uint8_t)(HeaderTypeReg >> 16);
+
+                if (Function == 0 && !(HeaderType & 0x80)) {
+                    break;
+                }
+            }
+        }
+    }
+
+    return 0;
 }

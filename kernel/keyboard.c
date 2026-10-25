@@ -196,6 +196,11 @@ KeyboardIrqHandler(void)
         Ascii = Ascii - 'A' + 'a';
     }
 
+    if (CtrlHeld && !AltHeld && ((Ascii >= 'a' && Ascii <= 'z') || (Ascii >= 'A' && Ascii <= 'Z'))) {
+        PushChar(((Ascii | 0x20) - 'a') + 1);
+        return;
+    }
+
     if (CtrlHeld || AltHeld) {
         return;
     }

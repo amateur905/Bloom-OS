@@ -116,6 +116,18 @@ ConsoleClear(void)
 }
 
 void
+ConsoleRefresh(void)
+{
+    FillScreen(BACKGROUND);
+
+    for (uint32_t r = 0; r < Rows; r++) {
+        Dirty[r] = 1;
+    }
+
+    ConsoleFlush();
+}
+
+void
 ConsoleInit(void)
 {
     Cols = (uint32_t)((ScreenWidth - 2 * MARGIN) / FONT_WIDTH);
