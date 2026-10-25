@@ -205,6 +205,25 @@ efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     Info.Width = ScreenWidth;
     Info.Height = ScreenHeight;
     Info.PixelsPerScanLine = PixelsPerScanLine;
+    Info.AcpiRsdp = 0;
+
+    EFI_GUID Acpi20Guid = ACPI_20_TABLE_GUID;
+
+    for (UINTN i = 0; i < ST->NumberOfTableEntries; i++) {
+        if (CompareGuid(&ST->ConfigurationTable[i].VendorGuid, &Acpi20Guid) == 0) {
+            Info.AcpiRsdp = (UINT64)(UINTN)ST->ConfigurationTable[i].VendorTable;
+            break;
+        }
+    }
+
+    if (Info.AcpiRsdp == 0) {
+        for (UINTN i = 0; i < ST->NumberOfTableEntries; i++) {
+            if (CompareGuid(&ST->ConfigurationTable[i].VendorGuid, &AcpiTableGuid) == 0) {
+                Info.AcpiRsdp = (UINT64)(UINTN)ST->ConfigurationTable[i].VendorTable;
+                break;
+            }
+        }
+    }
 
     UINTN MemMapSize = 0;
     EFI_MEMORY_DESCRIPTOR *MemMap = NULL;

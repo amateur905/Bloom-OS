@@ -11,6 +11,7 @@ typedef struct {
     UINT64 MemoryMapSize;
     UINT64 MemoryMapDescriptorSize;
     UINT32 MemoryMapDescriptorVersion;
+    UINT64 AcpiRsdp;
 } BOOT_INFO;
 
 #define KERNEL_LOAD_ADDRESS 0x100000
